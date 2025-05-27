@@ -1,0 +1,58 @@
+from mtcnn import MTCNN  # Face Detection Model
+import cv2  # Used for extracting images from Videos.
+import os # used For parsing through files
+import zipfile # used For zipping files
+def extract_and_crop_face_mtcnn(video_folder, output_folder, label):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    detector = MTCNN() #constructor
+    for video_file in os.listdir(video_folder):
+        if video_file.endswith('.mp4'):
+            print(f"Processing video: {video_file}")  # Print video being processed
+            video_path = os.path.join(video_folder, video_file)
+            cap = cv2.VideoCapture(video_path) # constructor
+            count = 0 #variable
+            saved = False
+            while True:
+                ret, frame = cap.read() #method returning Boolean and Numpy Array
+                if not ret:
+                    break
+                # Extract every Xth frame
+                if count % 10 == 0:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #numpy NdArray, convert BGR to RGB since MTCNN can only read that
+                    faces = detector.detect_faces(frame_rgb) #returns bounding box and if face detected
+
+                    if len(faces) > 0:
+                        x, y, w, h = faces[0]['box'] #if multiple faces, take the most prominent one
+                        face = frame[y:y+h, x:x+w] #crop region using bounding box
+                        face = cv2.resize(face, (299, 299))
+                        frame_filename = os.path.join(output_folder, f"{label}_{video_file[:-4]}_face{count}.jpg")
+                        cv2.imwrite(frame_filename, face)
+                        saved = True #Video Contains at least 1 face, In case Noisy Video is entered
+
+                count += 1
+
+            cap.release()
+            if not saved:
+                print(f"No face detected in: {video_file}")
+
+
+def zip_output_folder(output_folder, zip_filename):
+    with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(output_folder):
+            for file in files:
+                zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), output_folder))
+
+# Paths
+real_videos_path = '/kaggle/input/deep-fake-detection-dfd-entire-original-dataset/DFD_manipulated_sequences/DFD_manipulated_sequences'
+fake_videos_path = '/kaggle/input/deep-fake-detection-dfd-entire-original-dataset/DFD_original sequences'
+output_real = '/kaggle/working/real'
+output_fake = '/kaggle/working/fake'
+
+extract_and_crop_face_mtcnn(fake_videos_path, output_fake, 'fake')
+extract_and_crop_face_mtcnn(real_videos_path, output_real, 'real')
+
+zip_output_folder(output_real, '/kaggle/working/real_faces.zip')
+zip_output_folder(output_fake, '/kaggle/working/fake_faces.zip')
+
+#The warning means that GPU isnt available
